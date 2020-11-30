@@ -1,0 +1,4 @@
+The crypto module uses I2C to receive communication from the main board. The main board will send the crypto board an
+OP enum value sepcifying the operation that is required and then it will send the necesary data back to the crypto 
+board. Once the crypto board completes the crypto operation it will use the I2C protocol to send the information back
+to the main board.
