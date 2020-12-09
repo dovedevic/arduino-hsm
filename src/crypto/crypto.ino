@@ -1,51 +1,30 @@
-#include <AuthenticatedCipher.h>
-#include <BLAKE2b.h>
 #include <NoiseSource.h>
-#include <ChaCha.h>
-#include <XOF.h>
-#include <BLAKE2s.h>
-#include <Poly1305.h>
-#include <SHA3.h>
-#include <KeccakCore.h>
-#include <ChaChaPoly.h>
 #include <SHA256.h>
 #include <RNG.h>
-#include <EAX.h>
-#include <GHASH.h>
-#include <Cipher.h>
 #include <Crypto.h>
-#include <SHA512.h>
-#include <BlockCipher.h>
-#include <SHAKE.h>
 #include <AES.h>
-#include <BigNumberUtil.h>
-#include <Ed25519.h>
-#include <GCM.h>
-#include <Curve25519.h>
-#include <XTS.h>
-#include <GF128.h>
-#include <CTR.h>
 #include <Hash.h>
 #include <P521.h>
-#include <OMAC.h>
-
-
 #include <Wire.h>
 //#include <TransistorNoiseSource.h>
 
-// AES object
+// AES object for symetric crypto
 AES256 aes256;
-// statically set key for now
-byte key[32] = {0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01,
-                0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01};
 
-// Noise source to seed the random number generator.
-//TransistorNoiseSource noise(A1);
 
-byte rand_data[32];
+// static key for testing on start up
+byte key[32] = {0x00, 0x01, 0x0a, 0x01, 0x00, 0x01, 0x00, 0x01,
+                0x00, 0x01, 0x04, 0x01, 0x00, 0x01, 0x00, 0x01};
+
+// SHA256 object for HMAC
+SHA256 sha256;
+#define HASH_SIZE 32
+#define BLOCK_SIZE 64
+
 
 // Operation enum that is sent between boards telling 
 // the crypto board what action to perform
+//P521 not implemented at the moment
 enum OP {
   _AESENCRYPT,
   _AESDECRYPT,
@@ -56,25 +35,34 @@ enum OP {
 };
 
 
-
-
 void setup() {
   // print for debugging
   Serial.begin(9600);
   
-  // Security Module is number 1
-  Wire.begin(1);
+  // Security Module is number 4
+  Wire.begin(4);
 
   //register event
   Wire.onReceive(receiveEvent);
 
   // set up rng
-  RNG.begin("Hello");
+  //RNG.begin("Crypto Board");
 
   // add nosie source
   //RNG.addNoiseSource(noise);
+
+  //Debug Message
+  Serial.println("Iniializing Crypto Board");
+  test();
 }
 
+/*
+ * Test function o test that the board is running properly on startup
+ */
+void test(){
+  //TODO: write tests for each crypto operation
+  
+}
 
 
 void loop() {
@@ -85,48 +73,46 @@ void receiveEvent(int x){
   // get the enum from the wire
   OP action = (OP) Wire.read();
 
+  // each dcase calls the relevent function
   switch(action) {
     case _AESENCRYPT:
-      //call encrypt
+      //call aesEncrypt
+      aesEncrypt();
       break;
     case _AESDECRYPT:
-      //call decrypt
+      //call aesDecrypt
+      aesDecrypt();
       break;
     case _SHA256:
       //call hash
+      hash();
       break;
     case _RNG:
       //call rng
       rng();
       break;
     case _P521PUB:
-      // call encrypt_pub
+      // call encryptPub
+      encryptPub();
       break;
     case _P521PRI:
-      // call encrypt_pri
+      // call encryptPri
+      encryptPri();
       break;
     default:
       // error
+      Serial.println("Error: Unrecognized OP value, exiting program");
+      exit(-1);
       // may need to clear everything depending on implementation
       break;
   }  
 
 }
 
-void rng(){
-  // loop needs to be run periodically
-  RNG.loop();
-
-  // get rng
-  if (RNG.available(sizeof(rand_data))) {
-        RNG.rand(rand_data, sizeof(rand_data));
-    }
-      
-  //send rng to master
-  Wire.write(rand_data, sizeof(rand_data));
-  
-}
-
+/*
+ * Reads plaintext and uses internal key
+ * Writes back the ciphertext
+ */
 void aesEncrypt(){
   // se up variable to read plaintext
   byte plaintext[32];
@@ -147,6 +133,10 @@ void aesEncrypt(){
   
 }
 
+/*
+ * Reads ciphertext and uses internal key
+ * Writes back the plaintext
+ */
 void aesDecrypt(){
   // se up variable to read plaintext
   byte ciphertext[32];
@@ -166,4 +156,73 @@ void aesDecrypt(){
   // write plaintext back to main board
    Wire.write(plaintext, 32);
   
+}
+
+/*
+ * Reads data and uses internal key
+ * Writes back the resulting HMAC
+ */
+void hash(){
+  
+  // initialize variables
+  int bytesRead = 0;
+  byte data [32];
+  byte result[HASH_SIZE];
+  
+  // reset the HMAC
+  sha256.resetHMAC(&key, sizeof(key));
+
+  //get hash data
+  while(Wire.available()){
+    data[bytesRead] =Wire.read();
+    bytesRead++;
+  }
+
+  // add
+  sha256.update(&data, bytesRead);
+
+  // HMAC data
+  sha256.finalizeHMAC(&key, sizeof(key), result, sizeof(result));
+
+  //send back hash value
+  Wire.write(result, sizeof(result));
+}
+
+/*
+ * Currently using Arduinos builtin random
+ * Sample the time every time rng is called to generate a psuedo-random seed
+ * Reads the number of requested bytes
+ * Writes back the number of bytes
+ */
+void rng(){
+
+  //seed based on time      
+  randomSeed(millis());
+
+  // get number of bytes to generate
+  int bytesRequested = Wire.read();
+
+  //generate requested number of bytes
+  for(int i = 0; i < bytesRequested; i++) {
+
+    // generate random byte
+    byte randByte = random(256);
+
+    //debug print random byte
+    Serial.println(randByte);
+
+    //send byte back to main board
+    Wire.write(randByte);   
+  }
+  
+}
+
+void encryptPub(){
+  Serial.println("Public Key algorithm not yet implemented");
+  return;
+}
+
+void encryptPri(){
+  Serial.println("Private Key algorithm not yet implemented");
+  return;
 }
