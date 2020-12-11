@@ -1,44 +1,65 @@
 #include "MPU9250.h"
 
+// ******** \/\/ Configurable Settings \/\/ ******** //
+// Temperature Sensor Analog Pins
 #define TEMP_SENSE_1 A0
 #define TEMP_SENSE_2 A1
 #define TEMP_SENSE_3 A2
 #define TEMP_SENSE_4 A3
 #define TEMP_SENSE_5 A6
 #define TEMP_SENSE_6 A7
+// Include all definitions from above
 const int TEMP_SENSORS[] = {TEMP_SENSE_1, TEMP_SENSE_2, TEMP_SENSE_3, TEMP_SENSE_4, TEMP_SENSE_5, TEMP_SENSE_6};
+// Set the sensor count
 #define TEMP_SENSOR_COUNT 6
 
+// IMU I2C Address (Can be found using Examples->Wire->i2c_scanner
+// If AD0 is tied high on the IMU, typically this is 0x69, if low, typically 0x68
+#define AD0_I2C_ADDRESS 0x68
+
+// Pins going to the MPU
+#define CRITICAL_FLAG_PIN 13
+#define FLAG_PIN 11
+
+// Pins coming from the voltage sensor; Indicates the voltage on the wire (High = Batter Power, Low = USB Power)
+#define VOLTAGE_PIN 10
+
+// Debug mode, if building on a breadboard or wanting to test
+#define DEBUG_MODE (true)
+#define DEBUG_BUZZER 12
+#define DEBUG_BUZZER_CRITICAL 2000  // The sound played in MHz
+#define DEBUG_BUZZER_LOCAL 1000  // The sound played in MHz
+
+// Hardware specifications for sample rate, thresholds, and regions. Cannot be changed!
+// How many samples per device? Higher sample rate reduces noise, too much and detections can be slowed or masked out, too little and false positives are likely
 #define TEMP_NOISE_REDUCTION_SAMPLES 5
 #define IMU_NOISE_REDUCTION_SAMPLES 1
+// What is the local difference between max and min temperature readings (F)
 #define TEMPERATURE_DIFFERENTIAL_THRESHOLD 5
+// What is the absolute maximum difference between max and min temperature readings before a critical error (F)
 #define TEMPERATURE_DIFFERENTIAL_THRESHOLD_MAX 30
+// What is the absolute maximum temperature reading before a critical error (F)
 #define TEMPERATURE_THRESHOLD_MAX 120
+// What is the absolute minimum temperature reading before a critical error (F)
 #define TEMPERATURE_THRESHOLD_MIN 40
+// What is the local field strength allowed for the IMU (uT)
 #define MAGNETOMETER_THRESHOLD 150
+// What is the absolute maximum field strength allowed for the IMU (uT)
 #define MAGNETOMETER_THRESHOLD_MAX 400
+// What is the local rotation amount allowed for the IMU (rad/sample)
 #define GYROSCOPE_THRESHOLD 1.0
+// What is the absolute maximum rotation amount allowed for the IMU (rad/sample)
 #define GYROSCOPE_THRESHOLD_MAX 4.0
+
+// ******** /\/\ End Configurable Settings /\/\ ******** //
 
 float TEMP_SENSE_NOISE_BUFFER[TEMP_SENSOR_COUNT][TEMP_NOISE_REDUCTION_SAMPLES];
 float IMU_NOISE_BUFFER[3][IMU_NOISE_REDUCTION_SAMPLES];
-
 float denoisedTemperatureReadings[TEMP_SENSOR_COUNT];
 float readingsSummary[4];  // min, average, max, maxdiff
 int __noiseCheckIndex = 0;
 int __imuNoiseCheckIndex = 0;
-
-#define AD0_I2C_ADDRESS 0x68
 MPU9250 IMU(Wire, AD0_I2C_ADDRESS);
-
-#define CRITICAL_FLAG_PIN 13
-#define FLAG_PIN 11
-#define VOLTAGE_PIN 10
-
-#define DEBUG_MODE (true)
-#define DEBUG_BUZZER 12
-#define DEBUG_BUZZER_CRITICAL 2000
-#define DEBUG_BUZZER_LOCAL 1000
 
 #define OK_STATE 0
 #define LOCAL_ERROR 1
